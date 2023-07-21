@@ -1,2 +1,2 @@
 # userrecords
-programming assignment to take an input stream of updates and produce a summary of the updates.
+Go program that takes an input stream of updates and produces a summary of the updates.
