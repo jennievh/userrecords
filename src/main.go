@@ -38,13 +38,27 @@ func main() {
 	ch, err := stream.Process(ctx, f1)
 	check(err)
 
-	var users map[string]update.UserRecord
+	//var users map[string]update.UserRecord
+	CHUNK := 10
+	users := make(map[string]update.UserRecord, CHUNK)
 
+	// DEBUG
+	count := 0
 	for rec := range ch {
+		count++
+		if count > 10 {
+			os.Exit(0)
+		}
 		_ = rec
 		// THIS IS WHERE THE MAGIC HAPPENS
 		fmt.Printf("input id: %s,", rec.ID)
-		user, ok := update.FindOrCreate(users, rec.ID)
+		recs, user, ok := update.FindOrCreate(users, rec.ID)
+		//DEBUG: test recs
+		fmt.Printf("in main.go:\n")
+		for id, record := range recs {
+			fmt.Printf("ID: %s (%s) is in recs\n", id, record.UserID)
+		}
+
 		if ok {
 			user.UserID = rec.ID
 			// Attribute, or event?
