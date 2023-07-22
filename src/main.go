@@ -10,8 +10,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/jennievh/userrecords/stream"
-	"github.com/jennievh/userrecords/update"
+	"stream"
+	"update"
 )
 
 func check(e error) {
@@ -30,7 +30,7 @@ func main() {
 		cancel()
 	}()
 
-	f, err := os.Open("data/messages.1.data")
+	f, err := os.Open("../data/messages.1.data")
 	check(err)
 
 	f1 := io.ReadSeeker(f)
@@ -45,15 +45,18 @@ func main() {
 		// THIS IS WHERE THE MAGIC HAPPENS
 		fmt.Printf("input id: %s,", rec.ID)
 		user, ok := update.FindOrCreate(users, rec.ID)
-		// Attribute, or event?
-		if rec.Type == "attributes" {
-			fmt.Printf("\nThis record has one or more attribute changes\n")
-			for attr, val := range rec.Data {
-				fmt.Printf(", %s: %s", attr, val)
+		if ok {
+			user.UserID = rec.ID
+			// Attribute, or event?
+			if rec.Type == "attributes" {
+				fmt.Printf("\nThis record has one or more attribute changes\n")
+				for attr, val := range rec.Data {
+					fmt.Printf(", %s: %s", attr, val)
+				}
+				//Remember to check the timestamp
 			}
-			//Remember to check the timestamp
+			fmt.Printf("\n")
 		}
-		fmt.Printf("\n")
 	}
 	if err := ctx.Err(); err != nil {
 		log.Fatal(err)

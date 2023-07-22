@@ -43,6 +43,6 @@ type UserRecord struct {
 	Events     []Event   `json:"events"`
 }
 
-func FindOrCreate(recs map[string]UserRecord, s string) (UserRecord, int) {
-	return UserRecord{}, 1
+func FindOrCreate(recs map[string]UserRecord, s string) (UserRecord, bool) {
+	return UserRecord{}, false
 }

@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"stream"
 	"testing"
-	"userrecords/stream"
 )
 
 func TestProcess(t *testing.T) {
