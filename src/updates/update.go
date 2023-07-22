@@ -19,29 +19,19 @@ type History struct {
 }
 
 /*
-The Event struct stores the names of the events that have occurred, along with their unique IDs.
-
-	The unique IDs allow us to count only the event occurrences that are unique and omit
-	spurious duplicates.
-*/
-type Event struct {
-	Event string `json:"name"`
-	ID    string `json:"id"`
-}
-
-/*
 The UserRecord struct stores the set of attributes and events for a given user ID.
 
 	The resultant set of attributes will show the latest values for each attribute
 	assigned or changed. Previous values have been overwritten.
 
-	The resultant set of events will yield the number of unique times each type
+	For Events, we'll keep track of the unique IDs for the events, in order to count
+	them later. The result will yield the number of unique times each type
 	of event occurred for the given user. Duplicate (identical) events have been ignored.
 */
 type UserRecord struct {
-	UserID     string             `json:"user_id"`
-	Attributes map[string]History `json:"data"`
-	Events     []Event            `json:"events"`
+	UserID     string              `json:"user_id"`
+	Attributes map[string]History  `json:"data"`
+	Events     map[string][]string `json:"events"`
 }
 
 // Idea: templatize these funcs. They are so similar to each other
@@ -56,17 +46,12 @@ func FindOrCreate(recs map[string]UserRecord, s string) (map[string]UserRecord, 
 	recs[s] = UserRecord{
 		UserID:     s,
 		Attributes: map[string]History{},
-		Events:     []Event{},
+		Events:     map[string][]string{},
 	}
-	//DEBUG: test recs
-	/*for _, r := range recs {
-		fmt.Printf("ID: %s is in recs\n", r.UserID)
-	}*/
 	return recs, recs[s], true
 
 }
 
-// IDEA: maybe only pass in the user record?
 func FindAttr(attributes map[string]History, attributeName string) (map[string]History, bool) {
 	//DEBUG
 	if len(attributes) != 0 {
@@ -81,4 +66,20 @@ func FindAttr(attributes map[string]History, attributeName string) (map[string]H
 	}
 
 	return attributes, true
+}
+
+func FindEvent(events map[string][]string, eventName string, eventID string) (map[string][]string, bool) {
+	//DEBUG
+	var eventIDs []string
+
+	if len(events) != 0 {
+		fmt.Printf("FindEvent: this user has %d events logged already\n", len(events))
+	} else {
+		events = make(map[string][]string, 5)
+		eventIDs = make([]string, 1)
+	}
+	eventIDs = append(eventIDs, eventID)
+	events[eventName] = eventIDs
+
+	return events, true
 }

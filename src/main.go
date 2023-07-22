@@ -46,23 +46,25 @@ func main() {
 	count := 0
 	for rec := range ch {
 		count++
-		/*if count > 100 {
+		if count > 10 {
 			os.Exit(0)
-		}*/
+		}
 		_ = rec
 		// THIS IS WHERE THE MAGIC HAPPENS
-		fmt.Printf("input id: %s,", rec.ID)
-		users, user, ok := update.FindOrCreate(users, rec.ID)
+		fmt.Printf("update id: %s,", rec.ID)
+		fmt.Printf("user id: %s,", rec.UserID)
+		users, user, ok := update.FindOrCreate(users, rec.UserID)
 		//DEBUG: test recs
 		fmt.Printf("in main.go:\n")
 		for id, record := range users {
-			fmt.Printf("ID: %s (%s) is in recs\n", id, record.UserID)
+			fmt.Printf("User ID: %s (%s) is in recs\n", id, record.UserID)
 		}
 
 		if ok {
-			user.UserID = rec.ID
+			user.UserID = rec.UserID
 			// Attribute, or event?
-			if rec.Type == "attributes" {
+			switch {
+			case rec.Type == "attributes":
 				fmt.Printf("\nThis record has one or more attribute changes\n")
 
 				for attr, val := range rec.Data {
@@ -91,10 +93,43 @@ func main() {
 				}
 				fmt.Println()
 
-			} // if "attributes"
-			/*else { // events
+			case rec.Type == "event":
+				fmt.Printf("\nThis record shows an event logged\n")
+				event := rec.Name
+				fmt.Printf("Event: %s", event)
 
-			}*/
+				events, ok := update.FindEvent(user.Events, event, rec.ID)
+
+				if !ok {
+					os.Exit(1)
+				}
+				/*for attr, val := range rec.Data {
+					userAttrs, ok := update.FindEvents(user.Events, attr)
+					if !ok {
+						os.Exit(1)
+					}
+					if userAttrs[attr].Timestamp < rec.Timestamp {
+						var newHist update.History
+						newHist.Value = val
+						newHist.Timestamp = rec.Timestamp
+						userAttrs[attr] = newHist
+					}
+					user.Attributes = userAttrs
+				}
+				users[user.UserID] = user
+				*/
+				user.Events = events
+				fmt.Println()
+				fmt.Printf("event values for user ID %s are now\n", user.UserID)
+				for eventName, eventIDs := range user.Events {
+					fmt.Printf("%s: %s happened %d times, ", user.UserID, eventName, len(eventIDs))
+				}
+				fmt.Println()
+
+			case rec.Type != "attribute" && rec.Type != "event":
+				fmt.Printf("Event type %s not recognized!", rec.Type)
+				os.Exit(1)
+			}
 			fmt.Printf("\n")
 		}
 	}
