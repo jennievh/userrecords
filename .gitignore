@@ -8,6 +8,9 @@
 *.so
 *.dylib
 
+# Mac folder-level directory file
+.DS_Store
+
 # Test binary, built with `go test -c`
 *.test
 
@@ -17,5 +20,15 @@
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
+# data files that are too large to be checked in (and can be regenerated)
+data/messages.2.data
+data/messages.3.data
+data/verify.2.csv
+data/verify.3.csv
+
 # Go workspace file
 go.work
+
+# go generated files
+go.mod
+go.sum

@@ -5,8 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-
-	"github.com/customerio/homework/stream"
+	"userrecords/stream"
 )
 
 func TestProcess(t *testing.T) {

@@ -9,7 +9,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"userrecords/stream"
+
+	"github.com/jennievh/userrecords/stream"
+	"github.com/jennievh/userrecords/update"
 )
 
 func check(e error) {
@@ -28,7 +30,7 @@ func main() {
 		cancel()
 	}()
 
-	f, err := os.Open("../data/messages.1.data")
+	f, err := os.Open("data/messages.1.data")
 	check(err)
 
 	f1 := io.ReadSeeker(f)
@@ -36,13 +38,13 @@ func main() {
 	ch, err := stream.Process(ctx, f1)
 	check(err)
 
-	var users map[string]UserRecord
+	var users map[string]update.UserRecord
 
 	for rec := range ch {
 		_ = rec
 		// THIS IS WHERE THE MAGIC HAPPENS
 		fmt.Printf("input id: %s,", rec.ID)
-		user, ok := FindOrCreate(users, rec.ID)
+		user, ok := update.FindOrCreate(users, rec.ID)
 		// Attribute, or event?
 		if rec.Type == "attributes" {
 			fmt.Printf("\nThis record has one or more attribute changes\n")
