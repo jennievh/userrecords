@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sort"
 	"syscall"
 
 	"stream"
@@ -38,7 +39,6 @@ func main() {
 	ch, err := stream.Process(ctx, f1)
 	check(err)
 
-	//var users map[string]update.UserRecord
 	CHUNK := 10
 	users := make(map[string]update.UserRecord, CHUNK)
 
@@ -46,16 +46,16 @@ func main() {
 	count := 0
 	for rec := range ch {
 		count++
-		if count > 10 {
+		/*if count > 100 {
 			os.Exit(0)
-		}
+		}*/
 		_ = rec
 		// THIS IS WHERE THE MAGIC HAPPENS
 		fmt.Printf("input id: %s,", rec.ID)
-		recs, user, ok := update.FindOrCreate(users, rec.ID)
+		users, user, ok := update.FindOrCreate(users, rec.ID)
 		//DEBUG: test recs
 		fmt.Printf("in main.go:\n")
-		for id, record := range recs {
+		for id, record := range users {
 			fmt.Printf("ID: %s (%s) is in recs\n", id, record.UserID)
 		}
 
@@ -64,14 +64,98 @@ func main() {
 			// Attribute, or event?
 			if rec.Type == "attributes" {
 				fmt.Printf("\nThis record has one or more attribute changes\n")
+
 				for attr, val := range rec.Data {
 					fmt.Printf(", %s: %s", attr, val)
 				}
-				//Remember to check the timestamp
-			}
+				fmt.Println()
+
+				for attr, val := range rec.Data {
+					userAttrs, ok := update.FindAttr(user.Attributes, attr)
+					if !ok {
+						os.Exit(1)
+					}
+					if userAttrs[attr].Timestamp < rec.Timestamp {
+						var newHist update.History
+						newHist.Value = val
+						newHist.Timestamp = rec.Timestamp
+						userAttrs[attr] = newHist
+					}
+					user.Attributes = userAttrs
+				}
+				users[user.UserID] = user
+				fmt.Println()
+				fmt.Printf("attribute values for ID %s are now\n", user.UserID)
+				for attrName, itsHistory := range user.Attributes {
+					fmt.Printf("%s: %s at %d, ", attrName, itsHistory.Value, itsHistory.Timestamp)
+				}
+				fmt.Println()
+
+			} // if "attributes"
+			/*else { // events
+
+			}*/
 			fmt.Printf("\n")
 		}
 	}
+
+	fmt.Println("Data is now")
+	for thisId, userRecord := range users {
+		fmt.Printf("\nUser %s", thisId)
+		for attrName, attrData := range userRecord.Attributes {
+			fmt.Printf("\nAttribute: %s: %s at %d", attrName, attrData.Value, attrData.Timestamp)
+		}
+		fmt.Printf("\n\n")
+	}
+
+	fmt.Println("Results-------------------------------------------------")
+	type KeyValue struct {
+		Key   string
+		Value update.UserRecord
+	}
+
+	// create an empty slice of key-value pairs
+	s := make([]KeyValue, 0, len(users))
+	// append all map key-value pairs to the slice
+	for k, v := range users {
+		s = append(s, KeyValue{k, v})
+	}
+
+	// sort the slice of key-value pairs by value in descending order
+	sort.SliceStable(s, func(i, j int) bool {
+		return s[i].Key < s[j].Key
+	})
+
+	type AttrSlice struct {
+		Key   string
+		Value update.History
+	}
+
+	// iterate over the slice to get the desired order
+	for _, v := range s {
+		fmt.Printf("%s", v.Key)
+		sortedAttributes := make([]AttrSlice, 0, len(v.Value.Attributes))
+		for k, v := range v.Value.Attributes {
+			sortedAttributes = append(sortedAttributes, AttrSlice{k, v})
+		}
+
+		sort.SliceStable(sortedAttributes, func(i, j int) bool {
+			return s[i].Key < s[j].Key
+		})
+
+		for _, w := range sortedAttributes {
+			fmt.Printf(",%s=%s", w.Key, w.Value.Value)
+		}
+		fmt.Println()
+	}
+	/*for thisId, userRecord := range users {
+		fmt.Printf("\n%s", thisId)
+		for attrName, attrData := range userRecord.Attributes {
+			fmt.Printf(",%s=%s", attrName, attrData.Value)
+		}
+		fmt.Printf("\n\n")
+	}*/
+
 	if err := ctx.Err(); err != nil {
 		log.Fatal(err)
 	}
