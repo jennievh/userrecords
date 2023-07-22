@@ -1,5 +1,7 @@
 package update
 
+import "fmt"
+
 /*
 The History struct stores the latest attribute set for the user ID.
 
@@ -43,6 +45,23 @@ type UserRecord struct {
 	Events     []Event   `json:"events"`
 }
 
-func FindOrCreate(recs map[string]UserRecord, s string) (UserRecord, bool) {
-	return UserRecord{}, false
+func FindOrCreate(recs map[string]UserRecord, s string) (map[string]UserRecord, UserRecord, bool) {
+	//DEBUG
+	fmt.Printf("recs has %d entries\n", len(recs))
+	thisrec, present := recs[s]
+	if present {
+		return recs, thisrec, true
+	}
+
+	recs[s] = UserRecord{
+		UserID:     s,
+		Attributes: []History{},
+		Events:     []Event{},
+	}
+	//DEBUG: test recs
+	for _, r := range recs {
+		fmt.Printf("ID: %s is in recs\n", r.UserID)
+	}
+	return recs, recs[s], true
+
 }
