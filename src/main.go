@@ -47,19 +47,18 @@ func main() {
 	for rec := range ch {
 		count++
 		if count > 10 {
-			os.Exit(0)
+			//os.Exit(0)
+			break
 		}
 		_ = rec
 		// THIS IS WHERE THE MAGIC HAPPENS
-		fmt.Printf("update id: %s,", rec.ID)
-		fmt.Printf("user id: %s,", rec.UserID)
 		users, user, ok := update.FindOrCreate(users, rec.UserID)
 		//DEBUG: test recs
-		fmt.Printf("in main.go:\n")
+		/*fmt.Printf("in main.go:\n")
 		for id, record := range users {
 			fmt.Printf("User ID: %s (%s) is in recs\n", id, record.UserID)
 		}
-
+		*/
 		if ok {
 			user.UserID = rec.UserID
 			// Attribute, or event?
@@ -96,29 +95,33 @@ func main() {
 			case rec.Type == "event":
 				fmt.Printf("\nThis record shows an event logged\n")
 				event := rec.Name
+				eventID := rec.ID
 				fmt.Printf("Event: %s", event)
 
 				events, ok := update.FindEvent(user.Events, event, rec.ID)
-
 				if !ok {
 					os.Exit(1)
 				}
-				/*for attr, val := range rec.Data {
-					userAttrs, ok := update.FindEvents(user.Events, attr)
-					if !ok {
-						os.Exit(1)
+
+				for occurrence, idStrings := range events {
+					if event == occurrence {
+						found := false
+						for _, str := range idStrings {
+							if str == eventID {
+								found = true
+								break
+							}
+						}
+						if !found {
+							idStrings = append(idStrings, eventID)
+						}
+						events[event] = idStrings
+						break
 					}
-					if userAttrs[attr].Timestamp < rec.Timestamp {
-						var newHist update.History
-						newHist.Value = val
-						newHist.Timestamp = rec.Timestamp
-						userAttrs[attr] = newHist
-					}
-					user.Attributes = userAttrs
 				}
-				users[user.UserID] = user
-				*/
 				user.Events = events
+				users[user.UserID] = user
+
 				fmt.Println()
 				fmt.Printf("event values for user ID %s are now\n", user.UserID)
 				for eventName, eventIDs := range user.Events {
@@ -136,14 +139,20 @@ func main() {
 
 	fmt.Println("Data is now")
 	for thisId, userRecord := range users {
-		fmt.Printf("\nUser %s", thisId)
+		fmt.Printf("\nUser %s\n", thisId)
 		for attrName, attrData := range userRecord.Attributes {
-			fmt.Printf("\nAttribute: %s: %s at %d", attrName, attrData.Value, attrData.Timestamp)
+			fmt.Printf("Attribute: %s: %s at %d\n", attrName, attrData.Value, attrData.Timestamp)
+		}
+		fmt.Println()
+		for eventName, eventData := range userRecord.Events {
+			fmt.Printf("Event: %s happened %d times\n", eventName, len(eventData))
 		}
 		fmt.Printf("\n\n")
 	}
 
 	fmt.Println("Results-------------------------------------------------")
+
+	// Sorting of users in ascending order
 	type KeyValue struct {
 		Key   string
 		Value update.UserRecord
@@ -156,7 +165,7 @@ func main() {
 		s = append(s, KeyValue{k, v})
 	}
 
-	// sort the slice of key-value pairs by value in descending order
+	// sort the slice of user id/data pairs by user id in ascending order
 	sort.SliceStable(s, func(i, j int) bool {
 		return s[i].Key < s[j].Key
 	})
@@ -166,23 +175,46 @@ func main() {
 		Value update.History
 	}
 
-	// iterate over the slice to get the desired order
+	type EventSlice struct {
+		Key   string
+		Value []string
+	}
+
 	for _, v := range s {
+		// iterate over the slice of this user's attributes to get the desired order
+		// USER ID
 		fmt.Printf("%s", v.Key)
+
+		// ATTRIBUTES
 		sortedAttributes := make([]AttrSlice, 0, len(v.Value.Attributes))
 		for k, v := range v.Value.Attributes {
 			sortedAttributes = append(sortedAttributes, AttrSlice{k, v})
 		}
 
 		sort.SliceStable(sortedAttributes, func(i, j int) bool {
-			return s[i].Key < s[j].Key
+			return sortedAttributes[i].Key < sortedAttributes[j].Key
 		})
 
 		for _, w := range sortedAttributes {
 			fmt.Printf(",%s=%s", w.Key, w.Value.Value)
 		}
+
+		// EVENTS
+		sortedEvents := make([]EventSlice, 0, len(v.Value.Events))
+		for eventName, eventIDs := range v.Value.Events {
+			sortedEvents = append(sortedEvents, EventSlice{eventName, eventIDs})
+		}
+
+		sort.SliceStable(sortedEvents, func(i, j int) bool {
+			return sortedEvents[i].Key < sortedEvents[j].Key
+		})
+
+		for _, e := range sortedEvents {
+			fmt.Printf(",%s=%d", e.Key, len(e.Value))
+		}
 		fmt.Println()
 	}
+
 	/*for thisId, userRecord := range users {
 		fmt.Printf("\n%s", thisId)
 		for attrName, attrData := range userRecord.Attributes {
