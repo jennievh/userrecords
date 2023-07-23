@@ -68,18 +68,45 @@ func FindAttr(attributes map[string]History, attributeName string) (map[string]H
 	return attributes, true
 }
 
-func FindEvent(events map[string][]string, eventName string, eventID string) (map[string][]string, bool) {
+func FindOrCreateEvent(events map[string][]string, eventName string, eventID string) (map[string][]string, bool) {
 	//DEBUG
 	var eventIDs []string
 
 	if len(events) != 0 {
-		fmt.Printf("FindEvent: this user has %d events logged already\n", len(events))
+		fmt.Printf("FindEvent: this user has %d events logged already:\n", len(events))
+		var found bool
+		found = false
+		for thisEventName, eventList := range events {
+			fmt.Printf("name: %s,", thisEventName)
+			if eventName == thisEventName {
+				found = true
+			}
+			for _, currentEventID := range eventList {
+				fmt.Printf("%s,", currentEventID)
+			}
+			fmt.Println()
+		}
+
+		if !found {
+			eventIDs = make([]string, 1)
+			eventIDs[0] = eventID
+			events[eventName] = eventIDs
+		}
 	} else {
 		events = make(map[string][]string, 5)
 		eventIDs = make([]string, 1)
+		eventIDs[0] = eventID
+		events[eventName] = eventIDs
 	}
-	eventIDs = append(eventIDs, eventID)
-	events[eventName] = eventIDs
 
+	fmt.Printf("FindEvent: now the events are ")
+	for eventName, eventList := range events {
+		fmt.Printf("name: %s,", eventName)
+		for _, currentEventID := range eventList {
+			fmt.Printf("%s,", currentEventID)
+		}
+		fmt.Println()
+
+	}
 	return events, true
 }

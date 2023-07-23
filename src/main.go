@@ -31,7 +31,16 @@ func main() {
 		cancel()
 	}()
 
-	f, err := os.Open("../data/messages.1.data")
+	var errorString string
+	var inputFileName string
+	var outputFileName string
+	var validateFileName string
+
+	inputFileName = "../data/messages.1.data"
+	outputFileName = inputFileName + ".out.csv"
+	validateFileName = "../data/verify.1.csv"
+
+	f, err := os.Open(inputFileName)
 	check(err)
 
 	f1 := io.ReadSeeker(f)
@@ -42,16 +51,23 @@ func main() {
 	CHUNK := 10
 	users := make(map[string]update.UserRecord, CHUNK)
 
+	f2, err := os.OpenFile(outputFileName, os.O_WRONLY|os.O_CREATE, 0755)
+	check(err)
+
 	// DEBUG
 	count := 0
 	for rec := range ch {
+
 		count++
-		if count > 10 {
+		if count > 100 {
 			//os.Exit(0)
 			break
 		}
 		_ = rec
 		// THIS IS WHERE THE MAGIC HAPPENS
+		if rec.UserID == "" { // that's a bug; continue
+			continue
+		}
 		users, user, ok := update.FindOrCreate(users, rec.UserID)
 		//DEBUG: test recs
 		/*fmt.Printf("in main.go:\n")
@@ -61,20 +77,23 @@ func main() {
 		*/
 		if ok {
 			user.UserID = rec.UserID
+
+			//fmt.Printf("Record for user %s is %s\n", user.UserID, rec)
 			// Attribute, or event?
 			switch {
 			case rec.Type == "attributes":
-				fmt.Printf("\nThis record has one or more attribute changes\n")
+				//fmt.Printf("\nThis record has one or more attribute changes\n")
 
-				for attr, val := range rec.Data {
+				/*for attr, val := range rec.Data {
 					fmt.Printf(", %s: %s", attr, val)
 				}
-				fmt.Println()
+				fmt.Println() */
 
 				for attr, val := range rec.Data {
 					userAttrs, ok := update.FindAttr(user.Attributes, attr)
 					if !ok {
-						os.Exit(1)
+						errorString = fmt.Sprintf("Unable to find attribute %s!", attr)
+						log.Fatal(errorString)
 					}
 					if userAttrs[attr].Timestamp < rec.Timestamp {
 						var newHist update.History
@@ -85,12 +104,13 @@ func main() {
 					user.Attributes = userAttrs
 				}
 				users[user.UserID] = user
-				fmt.Println()
-				fmt.Printf("attribute values for ID %s are now\n", user.UserID)
-				for attrName, itsHistory := range user.Attributes {
-					fmt.Printf("%s: %s at %d, ", attrName, itsHistory.Value, itsHistory.Timestamp)
-				}
-				fmt.Println()
+				/*
+					fmt.Println()
+					fmt.Printf("attribute values for ID %s are now\n", user.UserID)
+					for attrName, itsHistory := range user.Attributes {
+						fmt.Printf("%s: %s at %d, ", attrName, itsHistory.Value, itsHistory.Timestamp)
+					}
+					fmt.Println() */
 
 			case rec.Type == "event":
 				fmt.Printf("\nThis record shows an event logged\n")
@@ -98,22 +118,36 @@ func main() {
 				eventID := rec.ID
 				fmt.Printf("Event: %s", event)
 
-				events, ok := update.FindEvent(user.Events, event, rec.ID)
+				events, ok := update.FindOrCreateEvent(user.Events, event, eventID)
 				if !ok {
 					os.Exit(1)
 				}
 
 				for occurrence, idStrings := range events {
 					if event == occurrence {
+						fmt.Printf("for %s, found event \"%s\"\n", user.UserID, event)
+						fmt.Printf("the event id strings are ")
 						found := false
 						for _, str := range idStrings {
+							fmt.Printf("%s,", str)
 							if str == eventID {
 								found = true
-								break
+								//break
 							}
 						}
+						fmt.Println()
 						if !found {
+							fmt.Printf("idstrings before appending:\n")
+							for _, str := range idStrings {
+								fmt.Printf("%s,", str)
+							}
+							fmt.Println()
 							idStrings = append(idStrings, eventID)
+							fmt.Printf("idstrings after appending:\n")
+							for _, str := range idStrings {
+								fmt.Printf("%s,", str)
+							}
+							fmt.Println()
 						}
 						events[event] = idStrings
 						break
@@ -130,8 +164,8 @@ func main() {
 				fmt.Println()
 
 			case rec.Type != "attribute" && rec.Type != "event":
-				fmt.Printf("Event type %s not recognized!", rec.Type)
-				os.Exit(1)
+				errorString = fmt.Sprintf("Event type %s not recognized!", rec.Type)
+				log.Fatal(errorString)
 			}
 			fmt.Printf("\n")
 		}
@@ -179,11 +213,19 @@ func main() {
 		Key   string
 		Value []string
 	}
+	var doOnce bool
+	doOnce = true
 
+	fmt.Println("about to write out results")
 	for _, v := range s {
 		// iterate over the slice of this user's attributes to get the desired order
 		// USER ID
-		fmt.Printf("%s", v.Key)
+		//fmt.Printf("%s", v.Key)
+		var result string
+		result = v.Key
+		if doOnce {
+			fmt.Printf("results is now\n%s\n", result)
+		}
 
 		// ATTRIBUTES
 		sortedAttributes := make([]AttrSlice, 0, len(v.Value.Attributes))
@@ -196,7 +238,10 @@ func main() {
 		})
 
 		for _, w := range sortedAttributes {
-			fmt.Printf(",%s=%s", w.Key, w.Value.Value)
+			result = fmt.Sprintf("%s,%s=%s", result, w.Key, w.Value.Value)
+		}
+		if doOnce {
+			fmt.Printf("results is now\n%s\n", result)
 		}
 
 		// EVENTS
@@ -210,18 +255,29 @@ func main() {
 		})
 
 		for _, e := range sortedEvents {
-			fmt.Printf(",%s=%d", e.Key, len(e.Value))
+			result = fmt.Sprintf("%s,%s=%d", result, e.Key, len(e.Value))
 		}
-		fmt.Println()
+		if doOnce {
+			fmt.Printf("results is now\n%s\n", result)
+		}
+
+		result = fmt.Sprintf("%s\n", result)
+		if doOnce {
+			fmt.Printf("First line of results is\n%s\n", result)
+			doOnce = false
+		}
+		fmt.Println(result)
+		f2.WriteString(result)
 	}
 
-	/*for thisId, userRecord := range users {
-		fmt.Printf("\n%s", thisId)
-		for attrName, attrData := range userRecord.Attributes {
-			fmt.Printf(",%s=%s", attrName, attrData.Value)
-		}
-		fmt.Printf("\n\n")
-	}*/
+	// Close f? f1? ch?
+	f.Close()
+	f2.Close()
+
+	err = validate(outputFileName, validateFileName)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	if err := ctx.Err(); err != nil {
 		log.Fatal(err)
