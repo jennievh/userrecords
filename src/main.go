@@ -11,9 +11,9 @@ import (
 	"sort"
 	"syscall"
 
+	"printing"
 	"stream"
 	"update"
-	"userrecords/src/printing"
 )
 
 func check(e error) {
