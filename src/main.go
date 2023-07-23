@@ -13,6 +13,7 @@ import (
 
 	"stream"
 	"update"
+	"userrecords/src/printing"
 )
 
 func check(e error) {
@@ -78,7 +79,7 @@ func main() {
 		if ok {
 			user.UserID = rec.UserID
 
-			//fmt.Printf("Record for user %s is %s\n", user.UserID, rec)
+			printing.PrintIncomingRecord(rec)
 			// Attribute, or event?
 			switch {
 			case rec.Type == "attributes":
