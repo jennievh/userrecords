@@ -1,16 +1,15 @@
 package update
 
-import "fmt"
+import (
+	"debugging"
+	"fmt"
+)
 
 /*
 The History struct stores the latest attribute value set for the key attribute.
 
-	It contains what the attribute (e.g. "email") whose value changed, was changed to
-	(e.g., "george@gmail.com"), and when (by timestamp).
-
-	Question: In the original Record, the attributes were simply a map. Would it be
-	worthwhile to keep the attributes as a map? How would we store the timestamp
-	for each entry? --because we want the latest value for an attribute, by timestamp.
+	It contains the attribute name (e.g. "email") whose value changed, what it
+	was changed to (e.g., "george@gmail.com"), and when (by timestamp).
 */
 type History struct {
 	//Attribute string `json:"name"`
@@ -21,12 +20,12 @@ type History struct {
 /*
 The UserRecord struct stores the set of attributes and events for a given user ID.
 
-	The resultant set of attributes will show the latest values for each attribute
+	The resultant set of attributes will show *only* the latest values for each attribute
 	assigned or changed. Previous values have been overwritten.
 
-	For Events, we'll keep track of the unique IDs for the events, in order to count
-	them later. The result will yield the number of unique times each type
-	of event occurred for the given user. Duplicate (identical) events have been ignored.
+	The Events map will keep track of all of the unique IDs for each event, in order to count
+	them later. Counting the IDs will yield the number of unique times each type
+	of event occurred for the given user. Duplicate (identical) events are quietly discarded.
 */
 type UserRecord struct {
 	UserID     string              `json:"user_id"`
@@ -35,9 +34,15 @@ type UserRecord struct {
 }
 
 // Idea: templatize these funcs. They are so similar to each other
-func FindOrCreate(recs map[string]UserRecord, s string) (map[string]UserRecord, UserRecord, bool) {
-	//DEBUG
-	//fmt.Printf("recs has %d entries\n", len(recs))
+
+/*
+The FindOrCreateUser func takes a user id and reviews the records seen thus far to
+be able to determine whether this is a new user to add to the set.
+
+	If new, a new user is allocated and added to the set. The set is returned, in
+	case it changed.
+*/
+func FindOrCreateUser(recs map[string]UserRecord, s string) (map[string]UserRecord, UserRecord, bool) {
 	thisrec, present := recs[s]
 	if present {
 		return recs, thisrec, true
@@ -52,11 +57,20 @@ func FindOrCreate(recs map[string]UserRecord, s string) (map[string]UserRecord, 
 
 }
 
-func FindAttr(attributes map[string]History, attributeName string) (map[string]History, bool) {
-	//DEBUG
-	if len(attributes) != 0 {
-		fmt.Printf("FindAttr: this user has %d attributes already\n", len(attributes))
-	} else {
+/*
+The FindOrCreateAttr func searches the current user's list of attributes (the History) to
+determine whether to add to the list.
+
+	If there are no attributes at all, a map is allocated to store them. If the named attribute
+	isn't already stored, a new value is allocated and the attribute name and latest value
+	are stored.
+
+	If the attribute isn't new, the calling function will replace its value with the latest
+	value (by timestamp).
+*/
+func FindOrCreateAttr(attributes map[string]History, attributeName string) map[string]History {
+
+	if len(attributes) == 0 {
 		attributes = make(map[string]History, 5)
 	}
 	var present bool
@@ -65,26 +79,38 @@ func FindAttr(attributes map[string]History, attributeName string) (map[string]H
 		attributes[attributeName] = History{"", 0}
 	}
 
-	return attributes, true
+	return attributes
 }
 
+/*
+The FindOrCreateEvent func determines whether the current user has a map of events allocated yet.
+
+	If not, a map is allocated and an event is allocated. The event name and given eventID are stored.
+
+	If so, and the given event is new, an event is allocated and its name and ID are stored.
+
+	If the event is not new, the calling function will add its ID to the set of IDs, if it
+	is unique.
+*/
 func FindOrCreateEvent(events map[string][]string, eventName string, eventID string) (map[string][]string, bool) {
-	//DEBUG
 	var eventIDs []string
 
 	if len(events) != 0 {
-		fmt.Printf("FindEvent: this user has %d events logged already:\n", len(events))
+		debugging.Debug(debugging.DEBUG_EVENTS, "FindEvent: this user has %d events logged already:\n", len(events))
 		var found bool
 		found = false
 		for thisEventName, eventList := range events {
-			fmt.Printf("name: %s,", thisEventName)
 			if eventName == thisEventName {
+				debugging.Debug(debugging.DEBUG_EVENTS, "event name %s found\n", thisEventName)
 				found = true
+				break
 			}
-			for _, currentEventID := range eventList {
-				fmt.Printf("%s,", currentEventID)
+			if debugging.Getdebug() == debugging.DEBUG_EVENTS {
+				for _, currentEventID := range eventList {
+					fmt.Printf("%s,", currentEventID)
+				}
+				fmt.Println()
 			}
-			fmt.Println()
 		}
 
 		if !found {
@@ -99,14 +125,5 @@ func FindOrCreateEvent(events map[string][]string, eventName string, eventID str
 		events[eventName] = eventIDs
 	}
 
-	fmt.Printf("FindEvent: now the events are ")
-	for eventName, eventList := range events {
-		fmt.Printf("name: %s,", eventName)
-		for _, currentEventID := range eventList {
-			fmt.Printf("%s,", currentEventID)
-		}
-		fmt.Println()
-
-	}
 	return events, true
 }
