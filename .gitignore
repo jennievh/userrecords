@@ -26,9 +26,6 @@ data/messages.3.data
 data/verify.2.csv
 data/verify.3.csv
 
-# Go workspace file
-go.work
-
 # go generated files
 go.mod
 go.sum

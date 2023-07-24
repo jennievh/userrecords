@@ -1,0 +1,10 @@
+go 1.20
+
+use (
+	.
+	./src/debug
+	./src/printing
+	./src/stream
+	./src/updates
+	./src/sorting
+)

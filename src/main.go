@@ -3,16 +3,16 @@ package main
 import (
 	"bufio"
 	"context"
+	"debugging"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"os/signal"
-	"sort"
-	"syscall"
-
 	"printing"
+	"sort"
 	"stream"
+	"syscall"
 	"update"
 )
 
@@ -52,50 +52,41 @@ func main() {
 	CHUNK := 10
 	users := make(map[string]update.UserRecord, CHUNK)
 
-	f2, err := os.OpenFile(outputFileName, os.O_WRONLY|os.O_CREATE, 0755)
+	f2, err := os.OpenFile(outputFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
 	check(err)
 
 	// DEBUG
+	debugging.Setdebug(debugging.DEBUG_NONE)
 	count := 0
 	for rec := range ch {
 
 		count++
-		if count > 100 {
-			//os.Exit(0)
-			break
-		}
+		/*
+			if count > 100 {
+				//os.Exit(0)
+				break
+			}*/
 		_ = rec
 		// THIS IS WHERE THE MAGIC HAPPENS
 		if rec.UserID == "" { // that's a bug; continue
+			log.Printf("record number %d has no or blank User ID", count)
 			continue
 		}
-		users, user, ok := update.FindOrCreate(users, rec.UserID)
-		//DEBUG: test recs
-		/*fmt.Printf("in main.go:\n")
-		for id, record := range users {
-			fmt.Printf("User ID: %s (%s) is in recs\n", id, record.UserID)
-		}
-		*/
+		users, user, ok := update.FindOrCreateUser(users, rec.UserID)
+
 		if ok {
 			user.UserID = rec.UserID
+			if debugging.Getdebug() == debugging.DEBUG_ALL {
+				printing.PrintIncomingRecord(rec)
+			}
 
-			printing.PrintIncomingRecord(rec)
 			// Attribute, or event?
 			switch {
 			case rec.Type == "attributes":
-				//fmt.Printf("\nThis record has one or more attribute changes\n")
-
-				/*for attr, val := range rec.Data {
-					fmt.Printf(", %s: %s", attr, val)
-				}
-				fmt.Println() */
 
 				for attr, val := range rec.Data {
-					userAttrs, ok := update.FindAttr(user.Attributes, attr)
-					if !ok {
-						errorString = fmt.Sprintf("Unable to find attribute %s!", attr)
-						log.Fatal(errorString)
-					}
+					userAttrs := update.FindOrCreateAttr(user.Attributes, attr)
+
 					if userAttrs[attr].Timestamp < rec.Timestamp {
 						var newHist update.History
 						newHist.Value = val
@@ -105,19 +96,13 @@ func main() {
 					user.Attributes = userAttrs
 				}
 				users[user.UserID] = user
-				/*
-					fmt.Println()
-					fmt.Printf("attribute values for ID %s are now\n", user.UserID)
-					for attrName, itsHistory := range user.Attributes {
-						fmt.Printf("%s: %s at %d, ", attrName, itsHistory.Value, itsHistory.Timestamp)
-					}
-					fmt.Println() */
+				if debugging.Getdebug() == debugging.DEBUG_ATTRIBUTES {
+					printing.PrintAttributesForUser(user.Attributes, user.UserID)
+				}
 
 			case rec.Type == "event":
-				fmt.Printf("\nThis record shows an event logged\n")
 				event := rec.Name
 				eventID := rec.ID
-				fmt.Printf("Event: %s", event)
 
 				events, ok := update.FindOrCreateEvent(user.Events, event, eventID)
 				if !ok {
@@ -126,29 +111,24 @@ func main() {
 
 				for occurrence, idStrings := range events {
 					if event == occurrence {
-						fmt.Printf("for %s, found event \"%s\"\n", user.UserID, event)
-						fmt.Printf("the event id strings are ")
 						found := false
 						for _, str := range idStrings {
-							fmt.Printf("%s,", str)
 							if str == eventID {
 								found = true
-								//break
+								break
 							}
 						}
 						fmt.Println()
 						if !found {
-							fmt.Printf("idstrings before appending:\n")
-							for _, str := range idStrings {
-								fmt.Printf("%s,", str)
+							if debugging.Getdebug() == debugging.DEBUG_ALL {
+								printing.PrintList(idStrings, "Event IDs before appending")
 							}
-							fmt.Println()
+
 							idStrings = append(idStrings, eventID)
-							fmt.Printf("idstrings after appending:\n")
-							for _, str := range idStrings {
-								fmt.Printf("%s,", str)
+
+							if debugging.Getdebug() == debugging.DEBUG_ALL {
+								printing.PrintList(idStrings, "Event IDs after appending")
 							}
-							fmt.Println()
 						}
 						events[event] = idStrings
 						break
@@ -157,35 +137,25 @@ func main() {
 				user.Events = events
 				users[user.UserID] = user
 
-				fmt.Println()
-				fmt.Printf("event values for user ID %s are now\n", user.UserID)
-				for eventName, eventIDs := range user.Events {
-					fmt.Printf("%s: %s happened %d times, ", user.UserID, eventName, len(eventIDs))
+				if debugging.Getdebug() == debugging.DEBUG_EVENTS {
+					printing.PrintEventsForUser(user.Events, user.UserID)
 				}
-				fmt.Println()
 
 			case rec.Type != "attribute" && rec.Type != "event":
 				errorString = fmt.Sprintf("Event type %s not recognized!", rec.Type)
 				log.Fatal(errorString)
 			}
-			fmt.Printf("\n")
 		}
 	}
 
-	fmt.Println("Data is now")
-	for thisId, userRecord := range users {
-		fmt.Printf("\nUser %s\n", thisId)
-		for attrName, attrData := range userRecord.Attributes {
-			fmt.Printf("Attribute: %s: %s at %d\n", attrName, attrData.Value, attrData.Timestamp)
-		}
-		fmt.Println()
-		for eventName, eventData := range userRecord.Events {
-			fmt.Printf("Event: %s happened %d times\n", eventName, len(eventData))
-		}
-		fmt.Printf("\n\n")
-	}
+	if debugging.Getdebug() == debugging.DEBUG_ALL {
+		fmt.Printf("Data so far is \n")
 
-	fmt.Println("Results-------------------------------------------------")
+		for _, userRecord := range users {
+			printing.PrintAttributesForUser(userRecord.Attributes, userRecord.UserID)
+			printing.PrintEventsForUser(userRecord.Events, userRecord.UserID)
+		}
+	}
 
 	// Sorting of users in ascending order
 	type KeyValue struct {
@@ -217,7 +187,7 @@ func main() {
 	var doOnce bool
 	doOnce = true
 
-	fmt.Println("about to write out results")
+	debugging.Debug(debugging.DEBUG_ALL, "%s", "about to write out results")
 	for _, v := range s {
 		// iterate over the slice of this user's attributes to get the desired order
 		// USER ID
@@ -225,7 +195,7 @@ func main() {
 		var result string
 		result = v.Key
 		if doOnce {
-			fmt.Printf("results is now\n%s\n", result)
+			debugging.Debug(debugging.DEBUG_ALL, "results is now\n%s\n", result)
 		}
 
 		// ATTRIBUTES
@@ -242,7 +212,7 @@ func main() {
 			result = fmt.Sprintf("%s,%s=%s", result, w.Key, w.Value.Value)
 		}
 		if doOnce {
-			fmt.Printf("results is now\n%s\n", result)
+			debugging.Debug(debugging.DEBUG_ALL, "results is now\n%s\n", result)
 		}
 
 		// EVENTS
@@ -259,15 +229,15 @@ func main() {
 			result = fmt.Sprintf("%s,%s=%d", result, e.Key, len(e.Value))
 		}
 		if doOnce {
-			fmt.Printf("results is now\n%s\n", result)
+			debugging.Debug(debugging.DEBUG_ALL, "results is now\n%s\n", result)
 		}
 
 		result = fmt.Sprintf("%s\n", result)
 		if doOnce {
-			fmt.Printf("First line of results is\n%s\n", result)
+			debugging.Debug(debugging.DEBUG_ALL, "First line of results is\n%s\n", result)
 			doOnce = false
 		}
-		fmt.Println(result)
+		//fmt.Println(result)
 		f2.WriteString(result)
 	}
 
