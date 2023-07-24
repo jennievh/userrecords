@@ -23,7 +23,7 @@ of event names and a count of their occurrences.
 
 ## How to try out this code
 ### Clone the repository to your local machine.
-I prefer using *git clone ... * at the command line, but there are many ways.
+I prefer using *git clone ...* at the command line, but there are many ways. https://git-scm.com/book/en/v2/Git-Basics-Getting-a-Git-Repository can help if needed.
 
 ### Generate input data
 Input data can be generated with the code in the *generate* package. Run the desired command
@@ -58,4 +58,4 @@ With the *main.go* code window selected, run the code with *Run->Start Debugging
 When the code has run and verified the output, you will likely see only *Process xxx has exited with status 0* (0 designates success).
 
 ## Results
-The output and verification text files will have been stored as you designated in https://github.com/jennievh/userrecords#designate-the-files-to-process and can be compared at the command line with **diff inputfile verificationfile*.
+The output and verification text files will have been stored as you designated in https://github.com/jennievh/userrecords#designate-the-files-to-process and can be compared at the command line with *diff inputfile verificationfile*.
