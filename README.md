@@ -25,9 +25,12 @@ of event names and a count of their occurrences.
 ### Clone the repository to your local machine.
 I prefer using *git clone ...* at the command line, but there are many ways. https://git-scm.com/book/en/v2/Git-Basics-Getting-a-Git-Repository can help if needed.
 
+### Load the workspace in Visual Studio Code
+Run *File->Open* in VS Code on the *userrecords* directory.
+
 ### Generate input data
 Input data can be generated with the code in the *generate* package. Run the desired command
-in the *userrecords* directory.
+in the *userrecords* directory in the *TERMINAL* window.
 
 **Small set of data**
 
