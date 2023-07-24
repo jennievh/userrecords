@@ -10,10 +10,15 @@ import (
 	"os"
 	"os/signal"
 	"printing"
-	"sort"
 	"stream"
 	"syscall"
 	"update"
+	"usersort"
+
+	"net/http"
+	_ "net/http/pprof" // Blank import to pprof
+
+	"github.com/pkg/profile"
 )
 
 func check(e error) {
@@ -23,6 +28,10 @@ func check(e error) {
 }
 
 func main() {
+	go func() {
+		fmt.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	sigs := make(chan os.Signal, 1)
@@ -37,9 +46,11 @@ func main() {
 	var outputFileName string
 	var validateFileName string
 
-	inputFileName = "../data/messages.1.data"
+	inputFileName = "../data/messages.3.data"
 	outputFileName = inputFileName + ".out.csv"
-	validateFileName = "../data/verify.1.csv"
+	validateFileName = "../data/verify.3.csv"
+
+	defer profile.Start(profile.GoroutineProfile).Stop()
 
 	f, err := os.Open(inputFileName)
 	check(err)
@@ -52,24 +63,17 @@ func main() {
 	CHUNK := 10
 	users := make(map[string]update.UserRecord, CHUNK)
 
-	f2, err := os.OpenFile(outputFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
-	check(err)
-
 	// DEBUG
-	debugging.Setdebug(debugging.DEBUG_NONE)
+	debugging.Setdebug(debugging.DEBUG_OUTPUT)
 	count := 0
 	for rec := range ch {
 
 		count++
-		/*
-			if count > 100 {
-				//os.Exit(0)
-				break
-			}*/
+
 		_ = rec
 		// THIS IS WHERE THE MAGIC HAPPENS
 		if rec.UserID == "" { // that's a bug; continue
-			log.Printf("record number %d has no or blank User ID", count)
+			//log.Printf("record number %d has no or blank User ID", count)
 			continue
 		}
 		users, user, ok := update.FindOrCreateUser(users, rec.UserID)
@@ -118,7 +122,7 @@ func main() {
 								break
 							}
 						}
-						fmt.Println()
+
 						if !found {
 							if debugging.Getdebug() == debugging.DEBUG_ALL {
 								printing.PrintList(idStrings, "Event IDs before appending")
@@ -157,87 +161,26 @@ func main() {
 		}
 	}
 
-	// Sorting of users in ascending order
-	type KeyValue struct {
-		Key   string
-		Value update.UserRecord
-	}
+	f2, err := os.OpenFile(outputFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
+	check(err)
 
-	// create an empty slice of key-value pairs
-	s := make([]KeyValue, 0, len(users))
-	// append all map key-value pairs to the slice
-	for k, v := range users {
-		s = append(s, KeyValue{k, v})
-	}
+	/* Now the users need to be sorted by ID. We'll do that by making a slice of them
+	   and using StableSort on that slice. Within the Usersort call, a similar process
+	   will happen on each user's attributes and events, so that all are sorted before
+	   writing out the info.
+	*/
 
-	// sort the slice of user id/data pairs by user id in ascending order
-	sort.SliceStable(s, func(i, j int) bool {
-		return s[i].Key < s[j].Key
-	})
+	users_slice := usersort.Usersort(users)
 
-	type AttrSlice struct {
-		Key   string
-		Value update.History
-	}
+	for _, v := range users_slice {
+		result := usersort.UserValuesSort(v.Value)
 
-	type EventSlice struct {
-		Key   string
-		Value []string
-	}
-	var doOnce bool
-	doOnce = true
-
-	debugging.Debug(debugging.DEBUG_ALL, "%s", "about to write out results")
-	for _, v := range s {
-		// iterate over the slice of this user's attributes to get the desired order
-		// USER ID
-		//fmt.Printf("%s", v.Key)
-		var result string
-		result = v.Key
-		if doOnce {
-			debugging.Debug(debugging.DEBUG_ALL, "results is now\n%s\n", result)
+		lastChar := result[len(result)-1:]
+		if lastChar == "," {
+			result = result[:(len(result) - 2)]
 		}
 
-		// ATTRIBUTES
-		sortedAttributes := make([]AttrSlice, 0, len(v.Value.Attributes))
-		for k, v := range v.Value.Attributes {
-			sortedAttributes = append(sortedAttributes, AttrSlice{k, v})
-		}
-
-		sort.SliceStable(sortedAttributes, func(i, j int) bool {
-			return sortedAttributes[i].Key < sortedAttributes[j].Key
-		})
-
-		for _, w := range sortedAttributes {
-			result = fmt.Sprintf("%s,%s=%s", result, w.Key, w.Value.Value)
-		}
-		if doOnce {
-			debugging.Debug(debugging.DEBUG_ALL, "results is now\n%s\n", result)
-		}
-
-		// EVENTS
-		sortedEvents := make([]EventSlice, 0, len(v.Value.Events))
-		for eventName, eventIDs := range v.Value.Events {
-			sortedEvents = append(sortedEvents, EventSlice{eventName, eventIDs})
-		}
-
-		sort.SliceStable(sortedEvents, func(i, j int) bool {
-			return sortedEvents[i].Key < sortedEvents[j].Key
-		})
-
-		for _, e := range sortedEvents {
-			result = fmt.Sprintf("%s,%s=%d", result, e.Key, len(e.Value))
-		}
-		if doOnce {
-			debugging.Debug(debugging.DEBUG_ALL, "results is now\n%s\n", result)
-		}
-
-		result = fmt.Sprintf("%s\n", result)
-		if doOnce {
-			debugging.Debug(debugging.DEBUG_ALL, "First line of results is\n%s\n", result)
-			doOnce = false
-		}
-		//fmt.Println(result)
+		debugging.Debug(debugging.DEBUG_ALL, "%s", "about to write out results")
 		f2.WriteString(result)
 	}
 
