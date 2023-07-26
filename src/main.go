@@ -76,11 +76,13 @@ func main() {
 
 	db.SetMaxOpenConns(1000)
 
-	_, err = db.Query("DELETE FROM attributes")
+	rows, err := db.Query("DELETE FROM attributes")
 	testError(err)
+	rows.Close()
 
-	_, err = db.Query("DELETE FROM events")
+	rows, err = db.Query("DELETE FROM events")
 	testError(err)
+	rows.Close()
 
 	// DEBUG
 	debugging.Setdebug(debugging.DEBUG_NONE)
@@ -139,7 +141,7 @@ func main() {
 
 	fmt.Printf("Ready to write out results!\n")
 
-	rows, err := db.Query("SELECT userID FROM attributes UNION SELECT userID FROM events ORDER BY userID")
+	rows, err = db.Query("SELECT userID FROM attributes UNION SELECT userID FROM events ORDER BY userID")
 	testError(err)
 
 	var thisUser string
