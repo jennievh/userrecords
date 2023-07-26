@@ -33,8 +33,6 @@ type UserRecord struct {
 	Events     map[string][]string `json:"events"`
 }
 
-// Idea: templatize these funcs. They are so similar to each other
-
 /*
 The FindOrCreateUser func takes a user id and reviews the records seen thus far to
 be able to determine whether this is a new user to add to the set.
@@ -42,10 +40,10 @@ be able to determine whether this is a new user to add to the set.
 	If new, a new user is allocated and added to the set. The set is returned, in
 	case it changed.
 */
-func FindOrCreateUser(recs map[string]UserRecord, s string) (map[string]UserRecord, UserRecord, bool) {
-	thisrec, present := recs[s]
+func FindOrCreateUser(recs map[string]UserRecord, s string) (map[string]UserRecord) {
+	_, present := recs[s]
 	if present {
-		return recs, thisrec, true
+		return recs
 	}
 
 	recs[s] = UserRecord{
@@ -53,7 +51,7 @@ func FindOrCreateUser(recs map[string]UserRecord, s string) (map[string]UserReco
 		Attributes: map[string]History{},
 		Events:     map[string][]string{},
 	}
-	return recs, recs[s], true
+	return recs
 
 }
 
@@ -92,13 +90,12 @@ The FindOrCreateEvent func determines whether the current user has a map of even
 	If the event is not new, the calling function will add its ID to the set of IDs, if it
 	is unique.
 */
-func FindOrCreateEvent(events map[string][]string, eventName string, eventID string) (map[string][]string, bool) {
+func FindOrCreateEvent(events map[string][]string, eventName string, eventID string) (map[string][]string) {
 	var eventIDs []string
 
 	if len(events) != 0 {
 		debugging.Debug(debugging.DEBUG_EVENTS, "FindEvent: this user has %d events logged already:\n", len(events))
-		var found bool
-		found = false
+		found := false
 		for thisEventName, eventList := range events {
 			if eventName == thisEventName {
 				debugging.Debug(debugging.DEBUG_EVENTS, "event name %s found\n", thisEventName)
@@ -125,5 +122,5 @@ func FindOrCreateEvent(events map[string][]string, eventName string, eventID str
 		events[eventName] = eventIDs
 	}
 
-	return events, true
+	return events
 }

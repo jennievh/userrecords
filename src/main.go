@@ -27,6 +27,8 @@ func check(e error) {
 	}
 }
 
+const chunk = 10
+
 func main() {
 	go func() {
 		fmt.Println(http.ListenAndServe("localhost:6060", nil))
@@ -52,103 +54,93 @@ func main() {
 
 	defer profile.Start(profile.GoroutineProfile).Stop()
 
-	f, err := os.Open(inputFileName)
+	inputFile, err := os.Open(inputFileName)
 	check(err)
 
-	f1 := io.ReadSeeker(f)
+	inputFileSeek := io.ReadSeeker(inputFile)
 
-	ch, err := stream.Process(ctx, f1)
+	streamingChannel, err := stream.Process(ctx, inputFileSeek)
 	check(err)
 
-	CHUNK := 10
-	users := make(map[string]update.UserRecord, CHUNK)
+	users := make(map[string]update.UserRecord, chunk)
 
 	// DEBUG
 	debugging.Setdebug(debugging.DEBUG_OUTPUT)
 	count := 0
-	for rec := range ch {
+	for rec := range streamingChannel {
 
 		count++
 
 		_ = rec
-		// THIS IS WHERE THE MAGIC HAPPENS
 		if rec.UserID == "" { // that's a bug; continue
-			//log.Printf("record number %d has no or blank User ID", count)
 			continue
 		}
-		users, user, ok := update.FindOrCreateUser(users, rec.UserID)
+		users := update.FindOrCreateUser(users, rec.UserID)
 
-		if ok {
-			user.UserID = rec.UserID
-			if debugging.Getdebug() == debugging.DEBUG_ALL {
-				printing.PrintIncomingRecord(rec)
+		user := users[rec.UserID]
+		user.UserID = rec.UserID
+		if debugging.Getdebug() == debugging.DEBUG_ALL {
+			printing.PrintIncomingRecord(rec)
+		}
+
+		// Attribute, or event?
+		switch rec.Type {
+		case "attributes":
+
+			for attr, val := range rec.Data {
+				userAttrs := update.FindOrCreateAttr(user.Attributes, attr)
+
+				if userAttrs[attr].Timestamp < rec.Timestamp {
+					userAttrs[attr] = update.History{Value: val, Timestamp: rec.Timestamp}
+				}
+				user.Attributes = userAttrs
+			}
+			users[user.UserID] = user
+			if debugging.Getdebug() == debugging.DEBUG_ATTRIBUTES {
+				printing.PrintAttributesForUser(user.Attributes, user.UserID)
 			}
 
-			// Attribute, or event?
-			switch {
-			case rec.Type == "attributes":
+		case "event":
+			event := rec.Name
+			eventID := rec.ID
 
-				for attr, val := range rec.Data {
-					userAttrs := update.FindOrCreateAttr(user.Attributes, attr)
+			events := update.FindOrCreateEvent(user.Events, event, eventID)
 
-					if userAttrs[attr].Timestamp < rec.Timestamp {
-						var newHist update.History
-						newHist.Value = val
-						newHist.Timestamp = rec.Timestamp
-						userAttrs[attr] = newHist
+			for occurrence, idStrings := range events {
+				if event == occurrence {
+					found := false
+					for _, str := range idStrings {
+						if str == eventID {
+							found = true
+							break
+						}
 					}
-					user.Attributes = userAttrs
-				}
-				users[user.UserID] = user
-				if debugging.Getdebug() == debugging.DEBUG_ATTRIBUTES {
-					printing.PrintAttributesForUser(user.Attributes, user.UserID)
-				}
 
-			case rec.Type == "event":
-				event := rec.Name
-				eventID := rec.ID
-
-				events, ok := update.FindOrCreateEvent(user.Events, event, eventID)
-				if !ok {
-					os.Exit(1)
-				}
-
-				for occurrence, idStrings := range events {
-					if event == occurrence {
-						found := false
-						for _, str := range idStrings {
-							if str == eventID {
-								found = true
-								break
-							}
+					if !found {
+						if debugging.Getdebug() == debugging.DEBUG_ALL {
+							printing.PrintList(idStrings, "Event IDs before appending")
 						}
 
-						if !found {
-							if debugging.Getdebug() == debugging.DEBUG_ALL {
-								printing.PrintList(idStrings, "Event IDs before appending")
-							}
-
-							idStrings = append(idStrings, eventID)
-
-							if debugging.Getdebug() == debugging.DEBUG_ALL {
-								printing.PrintList(idStrings, "Event IDs after appending")
-							}
-						}
+						idStrings = append(idStrings, eventID)
 						events[event] = idStrings
-						break
+
+						if debugging.Getdebug() == debugging.DEBUG_ALL {
+							printing.PrintList(idStrings, "Event IDs after appending")
+							break
+						}
 					}
 				}
-				user.Events = events
-				users[user.UserID] = user
-
-				if debugging.Getdebug() == debugging.DEBUG_EVENTS {
-					printing.PrintEventsForUser(user.Events, user.UserID)
-				}
-
-			case rec.Type != "attribute" && rec.Type != "event":
-				errorString = fmt.Sprintf("Event type %s not recognized!", rec.Type)
-				log.Fatal(errorString)
 			}
+			user.Events = events
+			users[user.UserID] = user
+
+			if debugging.Getdebug() == debugging.DEBUG_EVENTS {
+				printing.PrintEventsForUser(user.Events, user.UserID)
+			}
+
+		default:
+			errorString = fmt.Sprintf("Event type %s not recognized!", rec.Type)
+			log.Fatal(errorString)
 		}
 	}
 
@@ -161,7 +153,7 @@ func main() {
 		}
 	}
 
-	f2, err := os.OpenFile(outputFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
+	outputfile, err := os.OpenFile(outputFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
 	check(err)
 
 	/* Now the users need to be sorted by ID. We'll do that by making a slice of them
@@ -181,12 +173,12 @@ func main() {
 		}
 
 		debugging.Debug(debugging.DEBUG_ALL, "%s", "about to write out results")
-		f2.WriteString(result)
+		outputfile.WriteString(result)
 	}
 
-	// Close f? f1? ch?
-	f.Close()
-	f2.Close()
+	// Close files
+	defer inputFile.Close()
+	defer outputfile.Close()
 
 	err = validate(outputFileName, validateFileName)
 	if err != nil {
