@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"printing"
 	"stream"
+	"sync"
 	"syscall"
 	"update"
 
@@ -76,13 +77,18 @@ func main() {
 
 	db.SetMaxOpenConns(1000)
 
+	var mu sync.Mutex
+	mu.Lock()
 	rows, err := db.Query("DELETE FROM attributes")
 	testError(err)
 	rows.Close()
+	mu.Unlock()
 
+	mu.Lock()
 	rows, err = db.Query("DELETE FROM events")
 	testError(err)
 	rows.Close()
+	mu.Unlock()
 
 	// DEBUG
 	debugging.Setdebug(debugging.DEBUG_NONE)
@@ -107,7 +113,9 @@ func main() {
 		case rec.Type == "attributes":
 
 			for attr, val := range rec.Data {
+				mu.Lock()
 				update.FindOrCreateAttr(db, rec.UserID, attr, val, rec.Timestamp)
+				mu.Unlock()
 			}
 
 			if debugging.Getdebug() == debugging.DEBUG_ATTRIBUTES {
@@ -118,7 +126,9 @@ func main() {
 			event := rec.Name
 			eventID := rec.ID
 
+			mu.Lock()
 			update.FindOrCreateEvent(db, rec.UserID, event, eventID)
+			mu.Unlock()
 
 			if debugging.Getdebug() == debugging.DEBUG_EVENTS {
 				printing.PrintEventsForUser(db, rec.UserID)
@@ -141,6 +151,7 @@ func main() {
 
 	fmt.Printf("Ready to write out results!\n")
 
+	mu.Lock()
 	rows, err = db.Query("SELECT userID FROM attributes UNION SELECT userID FROM events ORDER BY userID")
 	testError(err)
 
@@ -153,6 +164,7 @@ func main() {
 		users = append(users, thisUser)
 	}
 	rows.Close()
+	mu.Unlock()
 
 	var result string
 
@@ -165,6 +177,7 @@ func main() {
 		result = currUser
 
 		// ATTRIBUTES
+		mu.Lock()
 		rows, err = db.Query("SELECT attribute_name, attribute_value FROM attributes WHERE userID = ? ORDER BY attribute_name", currUser)
 		if err != sql.ErrNoRows {
 			testError(err)
@@ -176,8 +189,10 @@ func main() {
 			}
 			rows.Close()
 		}
+		mu.Unlock()
 
 		// EVENTS
+		mu.Lock()
 		rows, err = db.Query("SELECT DISTINCT event_name, COUNT(event_id) OVER (PARTITION BY event_name) AS counter FROM events  WHERE userID = ? ORDER BY event_name", currUser)
 		if err != sql.ErrNoRows {
 			testError(err)
@@ -190,6 +205,7 @@ func main() {
 			}
 			rows.Close()
 		}
+		mu.Unlock()
 		if err == sql.ErrNoRows {
 			result = fmt.Sprintf("%s,", result) // if a user has no events, the verification string will have a final comma (bug)
 		}
