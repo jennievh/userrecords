@@ -1,9 +1,9 @@
 package printing
 
 import (
+	"database/sql"
 	"fmt"
 	"stream"
-	"update"
 )
 
 func PrintIncomingRecord(rec *stream.Record) {
@@ -19,27 +19,42 @@ func PrintIncomingRecord(rec *stream.Record) {
 	}
 }
 
-func PrintAttributesForUser(attrs map[string]update.History, userID string) {
+func PrintAttributesForUser(db *sql.DB, userID string) {
 	fmt.Println()
-	fmt.Printf("attribute values for ID %s are now\n", userID)
-	for attrName, itsHistory := range attrs {
-		fmt.Printf("%s: %s at %d, ", attrName, itsHistory.Value, itsHistory.Timestamp)
+	rows, err := db.Query("SELECT * FROM attributes WHERE userID = ?", userID)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	var user string
+	var attrName string
+	var attrValue string
+	var timestamp int64
+	for rows.Next() {
+
+		err := rows.Scan(&user, &attrName, &attrValue, &timestamp)
+		if err != nil {
+			panic(err.Error)
+		}
+		fmt.Printf("Attribute for user %s is %s: %s at %d, ", user, attrName, attrValue, timestamp)
 	}
 	fmt.Println()
 }
 
-func PrintEventsForUser(events map[string][]string, userID string) {
+func PrintEventsForUser(db *sql.DB, userID string) {
 	fmt.Println()
-	fmt.Printf("event values for user ID %s are now\n", userID)
-	for eventName, eventIDs := range events {
-		fmt.Printf("%s: %s happened %d times, ", userID, eventName, len(eventIDs))
+	rows, err := db.Query("SELECT userID, event_name, event_id FROM events WHERE userID = ? ORDER BY event_name", userID)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	var user string
+	var eventName string
+	var eventID string
+	for rows.Next() {
+		rows.Scan(&user, &eventName, &eventID)
+		fmt.Printf("%s: %s event ID %s, ", user, eventName, eventID)
 	}
 	fmt.Println()
 }
 
-func PrintList(theList []string, title string) {
-	fmt.Printf("List of %s:\n", title)
-	for index, str := range theList {
-		fmt.Printf("%d: %s\n", index, str)
-	}
-}

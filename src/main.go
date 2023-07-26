@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"database/sql"
 	"debugging"
 	"fmt"
 	"io"
@@ -13,11 +14,11 @@ import (
 	"stream"
 	"syscall"
 	"update"
-	"usersort"
 
 	"net/http"
 	_ "net/http/pprof" // Blank import to pprof
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/pkg/profile"
 )
 
@@ -46,29 +47,51 @@ func main() {
 	var outputFileName string
 	var validateFileName string
 
-	inputFileName = "../data/messages.3.data"
+	/*
+		Designate and open input files. Pass them to the stream processor
+		to get back a channel that will feed in one record at a time.
+	*/
+	inputFileName = "../data/messages.2.data"
 	outputFileName = inputFileName + ".out.csv"
-	validateFileName = "../data/verify.3.csv"
+	validateFileName = "../data/verify.2.csv"
 
 	defer profile.Start(profile.GoroutineProfile).Stop()
 
 	f, err := os.Open(inputFileName)
 	check(err)
+	defer f.Close()
 
 	f1 := io.ReadSeeker(f)
 
 	ch, err := stream.Process(ctx, f1)
 	check(err)
 
-	CHUNK := 10
-	users := make(map[string]update.UserRecord, CHUNK)
+	db, err := sql.Open("mysql", "root:test@tcp(127.0.0.1:3306)/userrecords_db")
+	testError(err)
+
+	defer db.Close()
+	if err := db.Ping(); err != nil {
+		panic(err)
+	}
+
+	db.SetMaxOpenConns(1000)
+
+	_, err = db.Query("DELETE FROM attributes")
+	testError(err)
+
+	_, err = db.Query("DELETE FROM events")
+	testError(err)
 
 	// DEBUG
-	debugging.Setdebug(debugging.DEBUG_OUTPUT)
+	debugging.Setdebug(debugging.DEBUG_NONE)
 	count := 0
 	for rec := range ch {
 
 		count++
+
+		if count%1000 == 0 {
+			fmt.Printf("Reached %d actions!\n", count)
+		}
 
 		_ = rec
 		// THIS IS WHERE THE MAGIC HAPPENS
@@ -76,117 +99,104 @@ func main() {
 			//log.Printf("record number %d has no or blank User ID", count)
 			continue
 		}
-		users, user, ok := update.FindOrCreateUser(users, rec.UserID)
 
-		if ok {
-			user.UserID = rec.UserID
-			if debugging.Getdebug() == debugging.DEBUG_ALL {
-				printing.PrintIncomingRecord(rec)
+		// Attribute, or event?
+		switch {
+		case rec.Type == "attributes":
+
+			for attr, val := range rec.Data {
+				update.FindOrCreateAttr(db, rec.UserID, attr, val, rec.Timestamp)
 			}
 
-			// Attribute, or event?
-			switch {
-			case rec.Type == "attributes":
-
-				for attr, val := range rec.Data {
-					userAttrs := update.FindOrCreateAttr(user.Attributes, attr)
-
-					if userAttrs[attr].Timestamp < rec.Timestamp {
-						var newHist update.History
-						newHist.Value = val
-						newHist.Timestamp = rec.Timestamp
-						userAttrs[attr] = newHist
-					}
-					user.Attributes = userAttrs
-				}
-				users[user.UserID] = user
-				if debugging.Getdebug() == debugging.DEBUG_ATTRIBUTES {
-					printing.PrintAttributesForUser(user.Attributes, user.UserID)
-				}
-
-			case rec.Type == "event":
-				event := rec.Name
-				eventID := rec.ID
-
-				events, ok := update.FindOrCreateEvent(user.Events, event, eventID)
-				if !ok {
-					os.Exit(1)
-				}
-
-				for occurrence, idStrings := range events {
-					if event == occurrence {
-						found := false
-						for _, str := range idStrings {
-							if str == eventID {
-								found = true
-								break
-							}
-						}
-
-						if !found {
-							if debugging.Getdebug() == debugging.DEBUG_ALL {
-								printing.PrintList(idStrings, "Event IDs before appending")
-							}
-
-							idStrings = append(idStrings, eventID)
-
-							if debugging.Getdebug() == debugging.DEBUG_ALL {
-								printing.PrintList(idStrings, "Event IDs after appending")
-							}
-						}
-						events[event] = idStrings
-						break
-					}
-				}
-				user.Events = events
-				users[user.UserID] = user
-
-				if debugging.Getdebug() == debugging.DEBUG_EVENTS {
-					printing.PrintEventsForUser(user.Events, user.UserID)
-				}
-
-			case rec.Type != "attribute" && rec.Type != "event":
-				errorString = fmt.Sprintf("Event type %s not recognized!", rec.Type)
-				log.Fatal(errorString)
+			if debugging.Getdebug() == debugging.DEBUG_ATTRIBUTES {
+				printing.PrintAttributesForUser(db, rec.UserID)
 			}
-		}
-	}
 
-	if debugging.Getdebug() == debugging.DEBUG_ALL {
-		fmt.Printf("Data so far is \n")
+		case rec.Type == "event":
+			event := rec.Name
+			eventID := rec.ID
 
-		for _, userRecord := range users {
-			printing.PrintAttributesForUser(userRecord.Attributes, userRecord.UserID)
-			printing.PrintEventsForUser(userRecord.Events, userRecord.UserID)
+			update.FindOrCreateEvent(db, rec.UserID, event, eventID)
+
+			if debugging.Getdebug() == debugging.DEBUG_EVENTS {
+				printing.PrintEventsForUser(db, rec.UserID)
+			}
+
+		case rec.Type != "attribute" && rec.Type != "event":
+			errorString = fmt.Sprintf("Event type %s not recognized!", rec.Type)
+			log.Fatal(errorString)
 		}
 	}
 
 	f2, err := os.OpenFile(outputFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
 	check(err)
+	defer f2.Close()
 
-	/* Now the users need to be sorted by ID. We'll do that by making a slice of them
-	   and using StableSort on that slice. Within the Usersort call, a similar process
-	   will happen on each user's attributes and events, so that all are sorted before
-	   writing out the info.
-	*/
+	// OUTPUT
+	// Extract an ordered slice of user IDs, sorted and uniq'd.
+	// Walk through this slice and extract attributes and events.
+	// Append all to a string. Write it out.
 
-	users_slice := usersort.Usersort(users)
+	fmt.Printf("Ready to write out results!\n")
 
-	for _, v := range users_slice {
-		result := usersort.UserValuesSort(v.Value)
+	rows, err := db.Query("SELECT userID FROM attributes UNION SELECT userID FROM events ORDER BY userID")
+	testError(err)
 
-		lastChar := result[len(result)-1:]
-		if lastChar == "," {
-			result = result[:(len(result) - 2)]
+	var thisUser string
+	var users []string
+	for rows.Next() {
+		err := rows.Scan(&thisUser)
+		testError(err)
+
+		users = append(users, thisUser)
+	}
+	rows.Close()
+
+	var result string
+
+	var attrName string
+	var attrValue string
+	var eventName string
+	var eventTimes int64
+	for _, currUser := range users {
+		// USER ID
+		result = currUser
+
+		// ATTRIBUTES
+		rows, err = db.Query("SELECT attribute_name, attribute_value FROM attributes WHERE userID = ? ORDER BY attribute_name", currUser)
+		if err != sql.ErrNoRows {
+			testError(err)
+
+			for rows.Next() {
+				err = rows.Scan(&attrName, &attrValue)
+				testError(err)
+				result = fmt.Sprintf("%s,%s=%s", result, attrName, attrValue)
+			}
+			rows.Close()
 		}
+
+		// EVENTS
+		rows, err = db.Query("SELECT DISTINCT event_name, COUNT(event_id) OVER (PARTITION BY event_name) AS counter FROM events  WHERE userID = ? ORDER BY event_name", currUser)
+		if err != sql.ErrNoRows {
+			testError(err)
+
+			for rows.Next() {
+				err = rows.Scan(&eventName, &eventTimes)
+				testError(err)
+
+				result = fmt.Sprintf("%s,%s=%d", result, eventName, eventTimes)
+			}
+			rows.Close()
+		}
+		if err == sql.ErrNoRows {
+			result = fmt.Sprintf("%s,", result) // if a user has no events, the verification string will have a final comma (bug)
+		}
+
+		result = fmt.Sprintf("%s\n", result)
 
 		debugging.Debug(debugging.DEBUG_ALL, "%s", "about to write out results")
 		f2.WriteString(result)
 	}
-
-	// Close f? f1? ch?
-	f.Close()
-	f2.Close()
 
 	err = validate(outputFileName, validateFileName)
 	if err != nil {
@@ -234,4 +244,10 @@ func validate(have, want string) error {
 		return err
 	}
 	return nil
+}
+
+func testError(err error) {
+	if err != nil {
+		panic(err.Error)
+	}
 }
