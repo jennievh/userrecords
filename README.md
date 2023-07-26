@@ -22,13 +22,8 @@ of event names and a count of their occurrences.
 *N.B.: this is not the output from the example input lines*
 
 ## How to try out this code
-### Clone the repository to your local machine.
-I prefer using *git clone ...* at the command line, but there are many ways. https://git-scm.com/book/en/v2/Git-Basics-Getting-a-Git-Repository can help if needed.
 
-### Load the workspace in Visual Studio Code
-Run *File->Open* in VS Code on the *userrecords* directory.
-
-### Generate input data
+## Input data generated
 Input data can be generated with the code in the *generate* package. Run the desired command
 in the *userrecords* directory in the *TERMINAL* window.
 
@@ -43,6 +38,9 @@ in the *userrecords* directory in the *TERMINAL* window.
 **Large set of data** (will take ~10 minutes to generate or to process)
 
 `go run src/generate/main.go -out data/messages.3.data -verify data/verify.3.csv --seed 1560000000 -count 1000000 -attrs 10 -events 5000000 -maxevents 10 -dupes 20`
+
+### Note
+The small set of data is in this repo. Not all input files could be checked in due to size.
 
 ### Designate the files to process
 Set the input and verification data:
@@ -62,3 +60,7 @@ When the code has run and verified the output, you will likely see only *Process
 
 ## Results
 The output and verification text files will have been stored as you designated in https://github.com/jennievh/userrecords#designate-the-files-to-process and can be compared at the command line with *diff inputfile verificationfile*.
+
+### Improvements
+The *implement_db* branch re-implements the data storage and manipulation with MySQL. It works for the 
+small data case, but is slow for the other data cases. *to be resolved*
