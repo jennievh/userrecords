@@ -3,11 +3,20 @@
 ## Introduction
 Consider users that change their profiles and order objects. 
 
-Userrecords takes a generated set of actions for as many as one million users
+Actions are taken, some of which modify attributes (such as email address,
+name, postal address); others are represented as events (such as purchasing a bag of flour
+or favoriting an item). The desired result is a summary of the current state:
+for each user, a list of the latest attribute values, and a count of each event 
+that has occurred for that user.
+
+The Userrecords program takes a generated set of actions for as many as one million users
 and produces a text output file summarizing the actions for each user, sorted
-by user ID. Each summary has the user ID, an alphabetically sorted list 
-of attribute names and their final values, followed by a sorted list 
+by user ID. Each summary line begins with the user ID, and is followed by an alphabetically sorted list 
+of attribute names and their final values, then a sorted list 
 of event names and a count of their occurrences.
+
+*Note that the example input uses a variety of nonsensical labels and values, in addition
+to some expected ones (like "email").*
 
 ### Example input
 > {"data":{"city":"Lake Kilback","created_at":"1547848970","email":"theresaauer@collier.net"},"id":"11ee220f-84b5-4fd3-a89e-989be5330c13","timestamp":1560981770,"type":"attributes","user_id":"54639"}
@@ -52,11 +61,6 @@ Line 51\* of src/main.go: `validateFileName = "../data/verify.2.csv"`
 for the medium set of data.
 
 \**approximately*
-
-### Run the code
-With the *main.go* code window selected, run the code with *Run->Start Debugging* or *Run->Run Without Debugging*.
-
-When the code has run and verified the output, you will likely see only *Process xxx has exited with status 0* (0 designates success).
 
 ## Results
 The output and verification text files will have been stored as you designated in https://github.com/jennievh/userrecords#designate-the-files-to-process and can be compared at the command line with *diff inputfile verificationfile*.
